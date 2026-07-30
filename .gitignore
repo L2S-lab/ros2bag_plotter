@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+**__pycache__/
+*.py[cod]
+*.so
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Build / packaging
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Test / lint caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+
+# Local runtime databases
+.ros2bag_plotter_mappings.db
+.ros2bag_plotter_schemas.db
+

@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ros2bag-plotter"
+version = "1.0.0"
+description = "GUI tool to plot/export ROS2 bags with generic custom-type mapping and export controls"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "plotly>=5.20.0",
+  "pandas>=2.0.0",
+  "numpy>=1.24.0",
+  "matplotlib>=3.8.0",
+  "PySide6>=6.6.0",
+  "kaleido>=0.2.1",
+  "pyyaml",
+  "rosbags>=0.10.7"
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.2.0",
+  "ruff>=0.6.0",
+  "build>=1.2.1"
+]
+
+[project.scripts]
+ros2bag-plotter = "ros2bag_plotter.main:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["ros2bag_plotter*"]
+
+[tool.setuptools.package-data]
+ros2bag_plotter = ["assets/*.svg"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

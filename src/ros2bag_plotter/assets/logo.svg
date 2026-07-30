@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <defs>
+    <linearGradient id="g1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#2563eb"/>
+      <stop offset="100%" stop-color="#06b6d4"/>
+    </linearGradient>
+  </defs>
+  <rect x="12" y="12" width="232" height="232" rx="46" fill="url(#g1)"/>
+  <g fill="#ffffff">
+    <circle cx="76" cy="176" r="14"/>
+    <circle cx="128" cy="132" r="14"/>
+    <circle cx="180" cy="88" r="14"/>
+    <path d="M76 176 L128 132 L180 88" stroke="#ffffff" stroke-width="10" fill="none" stroke-linecap="round"/>
+  </g>
+  <text x="30" y="74" fill="#ffffff" font-family="Arial, sans-serif" font-size="34" font-weight="700">ROS2</text>
+</svg>
