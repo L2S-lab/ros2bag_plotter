@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QProgressBar,
     QPushButton,
+    QSpinBox,
     QTextEdit,
     QVBoxLayout,
     QWidget,
@@ -63,13 +64,14 @@ class MsgSchemaDialog(QDialog):
 class MainWindow(QWidget):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("ROS2 Bag Plotter v1.0")
+        self.setWindowTitle("ROS2 Bag Plotter v1.1")
         self.resize(1100, 620)
         self._set_logo_window_icon()
 
         self.processor = BagProcessingService()
         self.root_dir = Path.cwd()
         self.topic_frames: Dict[str, pd.DataFrame] = {}
+        self.topic_controls: Dict[str, tuple[QCheckBox, QCheckBox, QCheckBox]] = {}
         self.current_bag: Path | None = None
         self.current_fig = None
 
@@ -138,8 +140,16 @@ class MainWindow(QWidget):
         self.chk_open.setChecked(True)
         self.chk_per_topic_html = QCheckBox("Per-topic separate HTML")
         self.chk_per_topic_html.setChecked(True)
+        self.spin_smooth_samples = QSpinBox()
+        self.spin_smooth_samples.setRange(1, 501)
+        self.spin_smooth_samples.setSingleStep(2)
+        self.spin_smooth_samples.setValue(5)
+        self.spin_smooth_samples.setToolTip("Moving-average window in samples for derivative smoothing.")
         ops.addWidget(self.chk_open)
         ops.addWidget(self.chk_per_topic_html)
+        ops.addWidget(QLabel("Smooth window (samples):"))
+        ops.addWidget(self.spin_smooth_samples)
+        ops.addStretch(1)
         lay.addLayout(ops)
 
         btns = QHBoxLayout()
@@ -153,7 +163,13 @@ class MainWindow(QWidget):
         self.btn_png.clicked.connect(lambda: self.export_image_selected("png"))
         self.btn_svg.clicked.connect(lambda: self.export_image_selected("svg"))
         self.btn_all.clicked.connect(self.batch_export_all)
-        for b in [self.btn_plot, self.btn_csv, self.btn_png, self.btn_svg, self.btn_all]:
+        for b in [
+            self.btn_plot,
+            self.btn_csv,
+            self.btn_png,
+            self.btn_svg,
+            self.btn_all,
+        ]:
             btns.addWidget(b)
         lay.addLayout(btns)
 
@@ -181,6 +197,7 @@ class MainWindow(QWidget):
 
     def refresh_topics(self):
         self.lst_topics.clear()
+        self.topic_controls.clear()
         bag = self.selected_bag()
         if not bag:
             return
@@ -188,20 +205,67 @@ class MainWindow(QWidget):
             reader = Ros2BagReader(bag)
             tmap = reader.get_topic_type_map()
             for topic, tname in tmap.items():
-                it = QListWidgetItem(f"{topic}   ({tname})")
+                row_widget = QWidget()
+                row_layout = QHBoxLayout(row_widget)
+                row_layout.setContentsMargins(4, 0, 4, 0)
+                row_layout.setSpacing(10)
+
+                chk_include = QCheckBox(f"{topic}   ({tname})")
+                chk_include.setChecked(True)
+                chk_derivative = QCheckBox("Plot d1/d2")
+                chk_derivative.setToolTip("Generate first and second derivative plot for this topic.")
+                chk_smooth = QCheckBox("Smooth d1/d2")
+                chk_smooth.setToolTip("Apply moving-average smoothing to derivative traces.")
+                chk_smooth.setEnabled(False)
+
+                def on_derivative_toggle(checked: bool, smooth_box=chk_smooth):
+                    smooth_box.setEnabled(bool(checked))
+                    if not checked:
+                        smooth_box.setChecked(False)
+
+                chk_derivative.toggled.connect(on_derivative_toggle)
+
+                row_layout.addWidget(chk_include)
+                row_layout.addStretch(1)
+                row_layout.addWidget(chk_derivative)
+                row_layout.addWidget(chk_smooth)
+
+                it = QListWidgetItem()
                 it.setData(Qt.UserRole, topic)
-                it.setCheckState(Qt.Checked)
+                it.setSizeHint(row_widget.sizeHint())
                 self.lst_topics.addItem(it)
+                self.lst_topics.setItemWidget(it, row_widget)
+                self.topic_controls[topic] = (chk_include, chk_derivative, chk_smooth)
         except Exception as e:
             QMessageBox.critical(self, "Error", str(e))
 
     def selected_topics(self) -> List[str]:
         out = []
-        for i in range(self.lst_topics.count()):
-            it = self.lst_topics.item(i)
-            if it.checkState() == Qt.Checked:
-                out.append(it.data(Qt.UserRole))
+        for topic, controls in self.topic_controls.items():
+            chk_include, _, _ = controls
+            if chk_include.isChecked():
+                out.append(topic)
         return out
+
+    def derivative_topics(self) -> List[str]:
+        out = []
+        for topic, controls in self.topic_controls.items():
+            chk_include, chk_derivative, _ = controls
+            if chk_include.isChecked() and chk_derivative.isChecked():
+                out.append(topic)
+        return out
+
+    def derivative_smoothing_topics(self) -> List[str]:
+        out = []
+        for topic, controls in self.topic_controls.items():
+            chk_include, chk_derivative, chk_smooth = controls
+            if chk_include.isChecked() and chk_derivative.isChecked() and chk_smooth.isChecked():
+                out.append(topic)
+        return out
+
+    def derivative_smoothing_window(self) -> int:
+        value = int(self.spin_smooth_samples.value())
+        return max(1, value)
 
     def _prompt_schema_definition(self, type_name: str, error_text: str) -> str | None:
         dlg = MsgSchemaDialog(type_name, error_text, self)
@@ -261,13 +325,27 @@ class MainWindow(QWidget):
     def plot_selected(self):
         try:
             bag, frames, _ = self._load_selected_bag_frames()
-            fig = build_combined_figure(frames)
+            derivative_set = set(self.derivative_topics())
+            derivative_smooth_set = set(self.derivative_smoothing_topics())
+            smooth_window = self.derivative_smoothing_window()
+            fig = build_combined_figure(
+                frames,
+                derivative_topics=derivative_set,
+                derivative_smoothing_topics=derivative_smooth_set,
+                derivative_smoothing_window=smooth_window,
+            )
             self.current_fig = fig
             out = save_html(fig, bag, "all_topics_plot.html")
 
             if self.chk_per_topic_html.isChecked():
                 for topic, df in frames.items():
-                    fig_t = build_per_topic_figure(topic, df)
+                    fig_t = build_per_topic_figure(
+                        topic,
+                        df,
+                        include_derivatives=(topic in derivative_set),
+                        smooth_derivatives=(topic in derivative_smooth_set),
+                        smooth_window=smooth_window,
+                    )
                     name = topic.strip("/").replace("/", "__") + ".html"
                     save_html(fig_t, bag, name)
 
@@ -289,7 +367,12 @@ class MainWindow(QWidget):
     def export_image_selected(self, ext: str):
         try:
             bag, frames, _ = self._load_selected_bag_frames()
-            fig = build_combined_figure(frames)
+            fig = build_combined_figure(
+                frames,
+                derivative_topics=set(self.derivative_topics()),
+                derivative_smoothing_topics=set(self.derivative_smoothing_topics()),
+                derivative_smoothing_window=self.derivative_smoothing_window(),
+            )
             self.current_fig = fig
             save_image(fig, bag, "all_topics_plot", ext, topic_frames=frames)
             QMessageBox.information(self, "Done", f"{ext.upper()} saved in: {bag / 'plots'}")
@@ -307,12 +390,20 @@ class MainWindow(QWidget):
         try:
             image_export_enabled = True
             image_error: str | None = None
+            derivative_set = set(self.derivative_topics())
+            derivative_smooth_set = set(self.derivative_smoothing_topics())
+            smooth_window = self.derivative_smoothing_window()
             for bag in bags:
                 frames = self._load_frames(bag, topics=[])
                 if not frames:
                     continue
                 export_csv(frames, bag)
-                fig = build_combined_figure(frames)
+                fig = build_combined_figure(
+                    frames,
+                    derivative_topics=derivative_set,
+                    derivative_smoothing_topics=derivative_smooth_set,
+                    derivative_smoothing_window=smooth_window,
+                )
                 save_html(fig, bag, "all_topics_plot.html")
                 if image_export_enabled:
                     try:
@@ -323,7 +414,13 @@ class MainWindow(QWidget):
                         image_error = str(e)
                 if self.chk_per_topic_html.isChecked():
                     for topic, df in frames.items():
-                        fig_t = build_per_topic_figure(topic, df)
+                        fig_t = build_per_topic_figure(
+                            topic,
+                            df,
+                            include_derivatives=(topic in derivative_set),
+                            smooth_derivatives=(topic in derivative_smooth_set),
+                            smooth_window=smooth_window,
+                        )
                         save_html(fig_t, bag, topic.strip("/").replace("/", "__") + ".html")
             if image_error:
                 QMessageBox.warning(

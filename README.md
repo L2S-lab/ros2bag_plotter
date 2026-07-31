@@ -9,6 +9,8 @@ python3 GUI tool to read ROS2 bag files, plot topic data, and export CSV/plots.
 - Plots known ROS message types directly
 - Supports custom message recovery using pasted `.msg` definition
 - Supports custom multi-field mapping (including array channels)
+- Per-topic derivative checkbox (`Plot d1/d2`) to include first/second derivatives in the same plot figure/HTML
+- Per-topic smoothing checkbox (`Smooth d1/d2`) for derivative traces, with GUI-selectable moving-average sample window
 - Exports:
   - CSV files to `csv/`
   - HTML plots to `plots/`
@@ -69,7 +71,7 @@ python3 -m pip install --user --upgrade "git+https://github.com/L2S-lab/ros2bag_
 Install/update to specific tag or commit:
 
 ```bash
-python3 -m pip install --user --upgrade "git+https://github.com/L2S-lab/ros2bag_plotter.git@v1.0.0"
+python3 -m pip install --user --upgrade "git+https://github.com/L2S-lab/ros2bag_plotter.git@v1.1.0"
 python3 -m pip install --user --upgrade "git+https://github.com/L2S-lab/ros2bag_plotter.git@<commit_sha>"
 ```
 
