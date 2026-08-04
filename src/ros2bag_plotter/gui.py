@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import os
+import shutil
+import subprocess
 from pathlib import Path
 from typing import Dict, List
 
@@ -78,6 +81,22 @@ class MainWindow(QWidget):
         self._ui()
         self.refresh_bags()
 
+    def _is_container_runtime(self) -> bool:
+        return Path("/.dockerenv").exists() or os.getenv("container") is not None
+
+    def _open_html_file(self, html_path: Path) -> bool:
+        if self._is_container_runtime():
+            if shutil.which("xdg-open"):
+                proc = subprocess.run(
+                    ["xdg-open", str(html_path)],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    check=False,
+                )
+                return proc.returncode == 0
+            return False
+        return QDesktopServices.openUrl(QUrl.fromLocalFile(str(html_path)))
+
     def _logo_path(self) -> Path:
         return Path(__file__).resolve().parent / "assets" / "logo.svg"
 
@@ -119,9 +138,12 @@ class MainWindow(QWidget):
         top = QHBoxLayout()
         self.lbl_root = QLabel(f"Root: {self.root_dir}")
         btn_root = QPushButton("Select Root")
+        btn_refresh = QPushButton("Refresh Bags")
         btn_root.clicked.connect(self.select_root)
+        btn_refresh.clicked.connect(self.refresh_bags)
         top.addWidget(self.lbl_root)
         top.addWidget(btn_root)
+        top.addWidget(btn_refresh)
         lay.addLayout(top)
 
         row = QHBoxLayout()
@@ -137,7 +159,11 @@ class MainWindow(QWidget):
 
         ops = QHBoxLayout()
         self.chk_open = QCheckBox("Open combined HTML after save")
-        self.chk_open.setChecked(True)
+        self.chk_open.setChecked(not self._is_container_runtime())
+        if self._is_container_runtime():
+            self.chk_open.setToolTip(
+                "Auto-open is disabled by default in Docker; open HTML directly from the plots folder."
+            )
         self.chk_per_topic_html = QCheckBox("Per-topic separate HTML")
         self.chk_per_topic_html.setChecked(True)
         self.spin_smooth_samples = QSpinBox()
@@ -349,8 +375,12 @@ class MainWindow(QWidget):
                     name = topic.strip("/").replace("/", "__") + ".html"
                     save_html(fig_t, bag, name)
 
-            if self.chk_open.isChecked():
-                QDesktopServices.openUrl(QUrl.fromLocalFile(str(out)))
+            if self.chk_open.isChecked() and not self._open_html_file(out):
+                QMessageBox.information(
+                    self,
+                    "Saved",
+                    f"HTML saved at:\n{out}\n\nNo browser launcher is available in this runtime.",
+                )
 
             QMessageBox.information(self, "Done", f"Plots saved in: {bag / 'plots'}")
         except Exception as e:

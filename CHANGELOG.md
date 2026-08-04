@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## v1.2.0 - 2026-08-04
+
+### Added
+- Refresh button in the GUI to rescan bags in the currently selected root folder.
+- Docker-based GUI runtime support with ROS distro selection and local-folder mounting.
+
+### Changed
+- Updated package/app version to `1.2.0`.
+
 ## v1.1.0 - 2026-07-31
 
 ### Added
@@ -13,4 +22,3 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 - Updated package/app version to `1.1.0`.
-
