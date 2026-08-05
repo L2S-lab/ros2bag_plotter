@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 import os
-import shutil
-import subprocess
 from pathlib import Path
 from typing import Dict, List
 
@@ -23,6 +21,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QProgressBar,
     QPushButton,
+    QApplication,
     QSpinBox,
     QTextEdit,
     QVBoxLayout,
@@ -84,17 +83,32 @@ class MainWindow(QWidget):
     def _is_container_runtime(self) -> bool:
         return Path("/.dockerenv").exists() or os.getenv("container") is not None
 
+    def _host_visible_path(self, path: Path) -> Path:
+        if not self._is_container_runtime():
+            return path
+        mount_root = Path(os.getenv("HOST_MOUNT_POINT", "/host_root"))
+        host_root = os.getenv("HOST_MOUNT_ROOT", "").strip()
+        if not host_root:
+            return path
+        try:
+            return Path(host_root) / path.resolve().relative_to(mount_root)
+        except ValueError:
+            return path
+
+    def _show_copyable_plot_path(self, html_path: Path):
+        host_path = self._host_visible_path(html_path)
+        dlg = QMessageBox(self)
+        dlg.setIcon(QMessageBox.Information)
+        dlg.setWindowTitle("Saved")
+        dlg.setText("HTML saved. Copy this full path and paste it in your browser.")
+        dlg.setInformativeText(str(host_path))
+        copy_btn = dlg.addButton("Copy path", QMessageBox.ActionRole)
+        dlg.addButton(QMessageBox.Ok)
+        dlg.exec()
+        if dlg.clickedButton() is copy_btn:
+            QApplication.clipboard().setText(str(host_path))
+
     def _open_html_file(self, html_path: Path) -> bool:
-        if self._is_container_runtime():
-            if shutil.which("xdg-open"):
-                proc = subprocess.run(
-                    ["xdg-open", str(html_path)],
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                    check=False,
-                )
-                return proc.returncode == 0
-            return False
         return QDesktopServices.openUrl(QUrl.fromLocalFile(str(html_path)))
 
     def _logo_path(self) -> Path:
@@ -375,14 +389,21 @@ class MainWindow(QWidget):
                     name = topic.strip("/").replace("/", "__") + ".html"
                     save_html(fig_t, bag, name)
 
-            if self.chk_open.isChecked() and not self._open_html_file(out):
-                QMessageBox.information(
-                    self,
-                    "Saved",
-                    f"HTML saved at:\n{out}\n\nNo browser launcher is available in this runtime.",
-                )
+            if self.chk_open.isChecked():
+                if self._is_container_runtime():
+                    self._show_copyable_plot_path(out)
+                elif not self._open_html_file(out):
+                    QMessageBox.information(
+                        self,
+                        "Saved",
+                        f"HTML saved at:\n{out}\n\nNo browser launcher is available in this runtime.",
+                    )
 
-            QMessageBox.information(self, "Done", f"Plots saved in: {bag / 'plots'}")
+            QMessageBox.information(
+                self,
+                "Done",
+                f"Plots saved in: {self._host_visible_path(bag / 'plots')}",
+            )
         except Exception as e:
             QMessageBox.critical(self, "Error", str(e))
 
@@ -390,7 +411,11 @@ class MainWindow(QWidget):
         try:
             bag, frames, _ = self._load_selected_bag_frames()
             export_csv(frames, bag)
-            QMessageBox.information(self, "Done", f"CSV exported in: {bag / 'csv'}")
+            QMessageBox.information(
+                self,
+                "Done",
+                f"CSV exported in: {self._host_visible_path(bag / 'csv')}",
+            )
         except Exception as e:
             QMessageBox.critical(self, "Error", str(e))
 
@@ -405,7 +430,11 @@ class MainWindow(QWidget):
             )
             self.current_fig = fig
             save_image(fig, bag, "all_topics_plot", ext, topic_frames=frames)
-            QMessageBox.information(self, "Done", f"{ext.upper()} saved in: {bag / 'plots'}")
+            QMessageBox.information(
+                self,
+                "Done",
+                f"{ext.upper()} saved in: {self._host_visible_path(bag / 'plots')}",
+            )
         except RuntimeError as e:
             QMessageBox.warning(self, "Image export unavailable", str(e))
         except Exception as e:

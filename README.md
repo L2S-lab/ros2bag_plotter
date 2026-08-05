@@ -59,9 +59,12 @@ This project includes an interactive launcher that:
 
 1. asks you to select ROS2 distro from the CI-supported list  
    (`humble`, `jazzy`, `kilted`, `lyrical`, `rolling`)
-2. builds a docker image with that distro argument
+2. reuses an existing docker image for that distro (rebuild only when requested)
 3. mounts your host root folder (default: `$HOME`) into the container
 4. runs the GUI with X11 display forwarding
+5. when installed as `~/.local/bin/ros2bag-plotter`, checks for launcher updates at startup
+6. caches Python dependency installation in Docker layers so source-only rebuilds do not re-download all packages
+7. automatically rebuilds stale cached images if runtime checks detect a broken install
 
 ### Prerequisites (Linux X11)
 
@@ -81,22 +84,36 @@ When prompted, enter:
 
 Inside the container, your host root is mounted at `/host_root` and used as working directory. You can then pick any subfolder from the GUI root-folder picker. If `/media` or `/mnt` exist on host, they are mounted too.
 
+In Docker runtime, when **Open combined HTML after save** is checked, the app does not try to auto-open a browser. It shows the full host path of the generated HTML and provides a **Copy path** button.
+
 Optional: choose a different host root mount:
 
 ```bash
 HOST_MOUNT_ROOT=/path/on/host ./scripts/run_gui_docker.sh
 ```
 
+Force an image rebuild (for local Dockerfile/script changes):
+
+```bash
+REBUILD_IMAGE=1 ./scripts/run_gui_docker.sh
+```
+
 ### Run Docker launcher directly from GitHub raw (no clone)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/L2S-lab/ros2bag_plotter/main/scripts/run_gui_docker.sh | bash
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/L2S-lab/ros2bag_plotter/main/scripts/run_gui_docker.sh)"
 ```
 
 You can combine with custom host mount root:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/L2S-lab/ros2bag_plotter/main/scripts/run_gui_docker.sh | HOST_MOUNT_ROOT=/path/on/host bash
+HOST_MOUNT_ROOT=/path/on/host bash -c "$(curl -fsSL https://raw.githubusercontent.com/L2S-lab/ros2bag_plotter/main/scripts/run_gui_docker.sh)"
+```
+
+You can also force rebuild from the one-liner:
+
+```bash
+REBUILD_IMAGE=1 bash -c "$(curl -fsSL https://raw.githubusercontent.com/L2S-lab/ros2bag_plotter/main/scripts/run_gui_docker.sh)"
 ```
 
 ### Re-run later when using the curl method
@@ -104,22 +121,32 @@ curl -fsSL https://raw.githubusercontent.com/L2S-lab/ros2bag_plotter/main/script
 Run the one-liner again:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/L2S-lab/ros2bag_plotter/main/scripts/run_gui_docker.sh | bash
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/L2S-lab/ros2bag_plotter/main/scripts/run_gui_docker.sh)"
 ```
 
-Or save a local launcher once (recommended):
+Or save a local launcher once (Debian-compatible, recommended):
 
 ```bash
-mkdir -p ~/.local/bin
-curl -fsSL https://raw.githubusercontent.com/L2S-lab/ros2bag_plotter/main/scripts/run_gui_docker.sh -o ~/.local/bin/ros2bag-plotter-docker
-chmod +x ~/.local/bin/ros2bag-plotter-docker
-~/.local/bin/ros2bag-plotter-docker
+mkdir -p "$HOME/.local/bin"
+curl -fsSL https://raw.githubusercontent.com/L2S-lab/ros2bag_plotter/main/scripts/run_gui_docker.sh -o "$HOME/.local/bin/ros2bag-plotter"
+chmod +x "$HOME/.local/bin/ros2bag-plotter"
+grep -qxF 'export PATH="$HOME/.local/bin:$PATH"' "$HOME/.bashrc" || echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$HOME/.bashrc"
+grep -qxF 'alias ros2bag-plotter="$HOME/.local/bin/ros2bag-plotter"' "$HOME/.bashrc" || echo 'alias ros2bag-plotter="$HOME/.local/bin/ros2bag-plotter"' >> "$HOME/.bashrc"
+source "$HOME/.bashrc"
+ros2bag-plotter
 ```
 
 After that, future runs are:
 
 ```bash
-~/.local/bin/ros2bag-plotter-docker
+ros2bag-plotter
+```
+
+On each run, this local launcher checks for updates and can update itself in-place.
+Disable the update check for a run with:
+
+```bash
+CHECK_FOR_UPDATES=0 ros2bag-plotter
 ```
 
 ### Docker base image and ROS distro mapping

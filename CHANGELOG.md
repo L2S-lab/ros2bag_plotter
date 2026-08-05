@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## v1.2.1 - 2026-08-05
+
+### Changed
+- Docker launcher now reuses existing images by default and rebuilds only when `REBUILD_IMAGE=1`.
+- Docker one-liner launch command now uses `bash -c "$(curl -fsSL ...)"` for better Debian compatibility.
+- Local launcher install target is now `~/.local/bin/ros2bag-plotter`, with startup update checks.
+- In Docker runtime, checking **Open combined HTML after save** now shows a copyable host path instead of trying to auto-open the browser.
+- Docker build now installs project code with `--no-build-isolation` and caches dependency installation in separate layers to avoid re-downloading packages on source-only rebuilds.
+- Docker container entrypoint now runs `python3 -m ros2bag_plotter.main`, and the launcher rebuilds stale images automatically if runtime import checks fail.
+
 ## v1.2.0 - 2026-08-04
 
 ### Added
